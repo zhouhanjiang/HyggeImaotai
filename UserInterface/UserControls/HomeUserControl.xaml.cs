@@ -14,6 +14,6 @@ namespace HyggeIMaoTai.UserInterface.UserControl
         }
 
         private void DonateButton_OnClick(object sender, RoutedEventArgs e)
-            => Link.OpenInBrowser("http://donate.lisok.cn/#");
+            => Link.OpenInBrowser("https://www.crcf.org.cn/web/woyaojuanzeng/pay.thtml");
     }
 }

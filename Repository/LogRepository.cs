@@ -105,7 +105,7 @@ namespace HyggeIMaoTai.Repository
         /// <param name="pageIndex">页码，从1开始，默认为1</param>
         /// <param name="pageSize">每页数量，默认为10</param>
         /// <returns>元组：(日志列表, 总记录数)</returns>
-        public static (List<LogEntity> logs, long total) GetLogList(string mobile = null, string searchContent = null, string status = null, int pageIndex = 1, int pageSize = 10)
+        public static (List<LogEntity> logs, long total) GetLogList(string? mobile = null, string? searchContent = null, string? status = null, int pageIndex = 1, int pageSize = 10)
         {
             var query = DB.Sqlite.Select<LogEntity>();
             

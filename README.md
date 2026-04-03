@@ -39,6 +39,9 @@
 
 视频：https://www.bilibili.com/video/BV1dj411H7oT
 
+启动命令：
+dotnet run --project HyggeIMaoTai.csproj -c Debug
+
 ## 演示图
 | i茅台预约                           |                                         |
 | ----------------------------------- | --------------------------------------- |
@@ -54,11 +57,6 @@
 若您有好的想法，发现一些 **BUG** 并修复了，欢迎提交 **Pull Request** 参与开源贡献
 
 发起 pull request 请求，提交到 master 分支，等待作者合并
-
-
-## Star历史
-
-[![Star History Chart](https://api.star-history.com/svg?repos=lisongkun/hygge-imaotai&type=Date)](https://star-history.com/#lisongkun/hygge-imaotai&Date)
 
 
 ## 鸣谢

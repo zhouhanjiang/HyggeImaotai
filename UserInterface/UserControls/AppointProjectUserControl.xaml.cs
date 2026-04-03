@@ -30,6 +30,7 @@ namespace HyggeIMaoTai.UserInterface.UserControls
                 App.WriteCache("mtSessionId.txt", string.Empty);
                 AppointProjectViewModel.ProductList.Clear();
                 await IMTService.GetCurrentSessionId();
+                Logger.Info("商品列表已刷新");
                 new MessageBoxCustom("商品列表已刷新", MessageType.Success, MessageButtons.Ok).ShowDialog();
             }
             catch (Exception ex)

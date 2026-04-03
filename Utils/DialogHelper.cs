@@ -1,6 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using System.Windows;
 using HyggeIMaoTai.UserInterface.Component;
 using MaterialDesignThemes.Wpf;
 using NLog;
@@ -41,9 +40,9 @@ namespace HyggeIMaoTai.Utils
                 catch (Exception ex)
                 {
                     // 关闭对话框后再显示错误消息
-                    Logger.Error(ex);
+                    Logger.Error(ex, $"操作失败: {ex.Message}");
                     args.Session.Close();
-                    MessageBox.Show($"操作失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    new MessageBoxCustom($"操作失败：{ex.Message}", MessageType.Error, MessageButtons.Ok).ShowDialog();
                     throw; // 重新抛出异常，让调用者处理
                 }
                 finally
@@ -82,9 +81,9 @@ namespace HyggeIMaoTai.Utils
                 }
                 catch (Exception ex)
                 {
-                    // 关闭对话框后再显示错误消息
+                    Logger.Error(ex, $"操作失败: {ex.Message}");
                     args.Session.Close();
-                    MessageBox.Show($"操作失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    new MessageBoxCustom($"操作失败：{ex.Message}", MessageType.Error, MessageButtons.Ok).ShowDialog();
                     throw; // 重新抛出异常，让调用者处理
                 }
                 finally
@@ -135,8 +134,8 @@ namespace HyggeIMaoTai.Utils
                     }
                     else
                     {
-                        // 默认错误处理
-                        MessageBox.Show($"操作失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                        Logger.Error(ex, $"操作失败: {ex.Message}");
+                        new MessageBoxCustom($"操作失败：{ex.Message}", MessageType.Error, MessageButtons.Ok).ShowDialog();
                     }
                 }
                 finally

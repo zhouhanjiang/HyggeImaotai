@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -25,15 +25,6 @@
     <None Remove="Resources\favicon.ico" />
     <None Remove="Resources\ms-icon-310x310.png" />
     <None Remove="Resources\ProfilePic.jpg" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <COMReference Include="{d37e2a3e-8545-3a39-9f4f-31827c9124ab}">
-      <WrapperTool>tlbimp</WrapperTool>
-      <VersionMinor>4</VersionMinor>
-      <VersionMajor>2</VersionMajor>
-      <Guid>d37e2a3e-8545-3a39-9f4f-31827c9124ab</Guid>
-    </COMReference>
   </ItemGroup>
 
   <ItemGroup>

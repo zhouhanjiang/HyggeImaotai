@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -63,7 +63,7 @@ namespace HyggeIMaoTai.UserInterface.Dialogs.AddAccountDialog
             var phone = _dataContext.Phone;
             try
             {
-                var sendFlag = await service.SendCode(phone);
+                await service.SendCode(phone);
                 SendPhoneCodeButton.IsEnabled = false;
                 _remainingTime = 60;
                 timer.Start();
@@ -72,7 +72,7 @@ namespace HyggeIMaoTai.UserInterface.Dialogs.AddAccountDialog
             catch (Exception exception)
             {
                 Logger.Error(exception, $"发送验证码失败!原因:{exception.Message}");
-                new MessageBoxCustom($"发送验证码失败!", MessageType.Error, MessageButtons.Ok).ShowDialog();
+                new MessageBoxCustom($"发送验证码失败：{exception.Message}", MessageType.Error, MessageButtons.Ok).ShowDialog();
             }
         }
 
@@ -94,7 +94,7 @@ namespace HyggeIMaoTai.UserInterface.Dialogs.AddAccountDialog
             catch (Exception exception)
             {
                 Logger.Error(exception, $"用户登录失败!原因:{exception.Message}");
-                new MessageBoxCustom($"用户登录失败!", MessageType.Error, MessageButtons.Ok).ShowDialog();
+                new MessageBoxCustom($"用户登录失败：{exception.Message}", MessageType.Error, MessageButtons.Ok).ShowDialog();
             }
         }
     }

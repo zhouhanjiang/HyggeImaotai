@@ -1,7 +1,8 @@
-﻿using Flurl.Http;
+using Flurl.Http;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
@@ -26,6 +27,8 @@ namespace HyggeIMaoTai
 
 
         private const string Salt = "2af72f100c356273d46284f6fd1dfc08";
+        // 2026-04-03 App Store 拉取失败时的 i茅台 版本占位，需随官方上架版本更新
+        private const string FallbackMtAppVersion = "1.9.4";
         private static string _mtVersion = "";
         private const string AesKey = "qbhajinldepmucsonaaaccgypwuvcjaa";
         private const string AesIv = "2018534749963515";
@@ -57,29 +60,70 @@ namespace HyggeIMaoTai
         private static async Task<string> GetMtVersion()
         {
             if (!string.IsNullOrEmpty(_mtVersion)) return _mtVersion;
-            var htmlSource = await "https://apps.apple.com/cn/app/i%E8%8C%85%E5%8F%B0/id1600482450"
-                .GetStringAsync();
-            
-            // 使用正则表达式匹配版本号，优先匹配原有格式
-            var pattern = new Regex(@"new__latest__version\"">(.*?)<\/p>", RegexOptions.Singleline);
-            var matcher = pattern.Match(htmlSource);
-            
-            // 兼容：如果原有格式未匹配到，尝试匹配新格式 <h4 class="svelte-13339ih">版本 1.8.5</h4>
-            if (!matcher.Success)
+            try
             {
-                pattern = new Regex(@"<h4[^>]*>版本\s+(\d+\.\d+\.\d+)<\/h4>", RegexOptions.Singleline);
-                matcher = pattern.Match(htmlSource);
+                var htmlSource = await "https://apps.apple.com/cn/app/i%E8%8C%85%E5%8F%B0/id1600482450"
+                    .WithHeader("User-Agent",
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+                    .WithHeader("Accept-Language", "zh-CN,zh;q=0.9")
+                    .GetStringAsync();
+
+                var patterns = new[]
+                {
+                    new Regex(@"new__latest__version\"">(.*?)<\/p>", RegexOptions.Singleline),
+                    new Regex(@"<h4[^>]*>\s*版本\s+(\d+\.\d+\.\d+)\s*<\/h4>", RegexOptions.Singleline),
+                    new Regex(@"版本\s+(\d+\.\d+\.\d+)", RegexOptions.None)
+                };
+                foreach (var pattern in patterns)
+                {
+                    var matcher = pattern.Match(htmlSource);
+                    if (!matcher.Success || matcher.Groups.Count < 2) continue;
+                    var mtVersion = matcher.Groups[1].Value.Trim().Replace("版本 ", "");
+                    if (string.IsNullOrEmpty(mtVersion)) continue;
+                    _mtVersion = mtVersion;
+                    Logger.Info($"GetMtVersion 解析版本={_mtVersion}");
+                    return _mtVersion;
+                }
             }
-            
-            if (matcher.Success && matcher.Groups.Count > 1)
+            catch (Exception ex)
             {
-                // 清理版本号字符串，去除"版本 "前缀和空白字符
-                var mtVersion = matcher.Groups[1].Value.Trim().Replace("版本 ", "");
-                _mtVersion = mtVersion;
-                return mtVersion;
+                Logger.Warn(ex, "GetMtVersion 拉取 App Store 失败，使用默认版本");
             }
-            
-            throw new Exception("获取版本号失败：未找到版本信息");
+
+            _mtVersion = FallbackMtAppVersion;
+            Logger.Warn($"GetMtVersion 使用默认版本={_mtVersion}");
+            return _mtVersion;
+        }
+
+        // 2026-04-03 接口返回的 code 可能为数字或字符串
+        private static bool IsSuccessCode(JToken? codeToken)
+        {
+            if (codeToken == null || codeToken.Type == JTokenType.Null) return false;
+            if (codeToken.Type == JTokenType.Integer) return codeToken.Value<int>() == 2000;
+            if (codeToken.Type == JTokenType.String) return codeToken.Value<string>() == "2000";
+            return false;
+        }
+
+        // 2026-04-03 勿设置 Host/Content-Length/Content-Type，避免与正文不一致导致服务端拒收
+        private static async Task AttachMoutaiHeadersAsync(HttpRequestMessage request)
+        {
+            request.Headers.TryAddWithoutValidation("Accept", "*/*");
+            request.Headers.TryAddWithoutValidation("User-Agent", "iOS;16.3;Apple;?unrecognized?");
+            request.Headers.Add("MT-Lat", "28.499562");
+            request.Headers.Add("MT-K", "1675213490331");
+            request.Headers.Add("MT-Lng", "102.182324");
+            request.Headers.Add("MT-User-Tag", "0");
+            request.Headers.Add("MT-Network-Type", "WIFI");
+            request.Headers.TryAddWithoutValidation("MT-Team-ID", "");
+            request.Headers.Add("MT-Info", "028e7f96f6369cafe1d105579c5b9377");
+            request.Headers.Add("MT-Device-ID", "2F2075D0-B66C-4287-A903-DBFF6358342A");
+            request.Headers.Add("MT-Bundle-ID", "com.moutai.mall");
+            request.Headers.Add("Accept-Language", "en-CN;q=1, zh-Hans-CN;q=0.9");
+            request.Headers.Add("MT-Request-ID",
+                $"{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}{Random.Shared.Next(100, 999)}");
+            request.Headers.Add("MT-APP-Version", await GetMtVersion());
+            request.Headers.Add("MT-R", "clips_OlU6TmFRag5rCXwbNAQ/Tz1SKlN8THcecBp/HGhHdw==");
+            request.Headers.TryAddWithoutValidation("Accept-Encoding", "gzip, deflate, br");
         }
 
         /// <summary>
@@ -90,42 +134,47 @@ namespace HyggeIMaoTai
         /// <exception cref="Exception"></exception>
         public async Task<bool> SendCode(string phone)
         {
-            var client = new HttpClient();
+            if (string.IsNullOrWhiteSpace(phone))
+                throw new Exception("手机号不能为空");
+
+            var trimmed = phone.Trim();
+            using var handler = new HttpClientHandler
+            {
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate |
+                                        DecompressionMethods.Brotli
+            };
+            using var client = new HttpClient(handler);
             var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var values = new Dictionary<string, string>
             {
-                { "mobile", phone },
-                { "md5", Signature(phone, timestamp) },
+                { "mobile", trimmed },
+                { "md5", Signature(trimmed, timestamp) },
                 { "timestamp", timestamp + "" }
             };
-            var content = new StringContent(JsonConvert.SerializeObject(values), Encoding.UTF8, "application/json");
-            client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "*/*");
-            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "iOS;16.3;Apple;?unrecognized?");
-            client.DefaultRequestHeaders.Add("MT-Lat", "28.499562");
-            client.DefaultRequestHeaders.Add("MT-K", "1675213490331");
-            client.DefaultRequestHeaders.Add("MT-Lng", "102.182324");
-            client.DefaultRequestHeaders.Add("Host", "app.moutai519.com.cn");
-            client.DefaultRequestHeaders.Add("MT-User-Tag", "0");
-            client.DefaultRequestHeaders.Add("MT-Network-Type", "WIFI");
-            client.DefaultRequestHeaders.TryAddWithoutValidation("MT-Team-ID", "");
-            client.DefaultRequestHeaders.Add("MT-Info", "028e7f96f6369cafe1d105579c5b9377");
-            client.DefaultRequestHeaders.Add("MT-Device-ID", "2F2075D0-B66C-4287-A903-DBFF6358342A");
-            client.DefaultRequestHeaders.Add("MT-Bundle-ID", "com.moutai.mall");
-            client.DefaultRequestHeaders.Add("Accept-Language", "en-CN;q=1, zh-Hans-CN;q=0.9");
-            client.DefaultRequestHeaders.Add("MT-Request-ID", "167560018873318465");
-            client.DefaultRequestHeaders.Add("MT-APP-Version", await GetMtVersion());
-            client.DefaultRequestHeaders.Add("MT-R", "clips_OlU6TmFRag5rCXwbNAQ/Tz1SKlN8THcecBp/HGhHdw==");
-            client.DefaultRequestHeaders.TryAddWithoutValidation("Content-Length", "93");
-            client.DefaultRequestHeaders.Add("Accept-Encoding", "gzip, deflate, br");
-            client.DefaultRequestHeaders.Add("Connection", "keep-alive");
-            client.DefaultRequestHeaders.TryAddWithoutValidation("Content-Type", "application/json");
-            var response = await client
-                .PostAsync("https://app.moutai519.com.cn/xhr/front/user/register/vcode", content);
+            var url = "https://app.moutai519.com.cn/xhr/front/user/register/vcode";
+            using var request = new HttpRequestMessage(HttpMethod.Post, url);
+            await AttachMoutaiHeadersAsync(request);
+            request.Content =
+                new StringContent(JsonConvert.SerializeObject(values), Encoding.UTF8, "application/json");
+            var response = await client.SendAsync(request);
             var responseString = await response.Content.ReadAsStringAsync();
-            var responseJson = JObject.Parse(responseString);
-            var code = (string)responseJson["code"];
-            if (code == "2000") return true;
-            throw new Exception(responseString);
+            Logger.Info($"SendCode http={(int)response.StatusCode} body={responseString}");
+
+            JObject responseJson;
+            try
+            {
+                responseJson = JObject.Parse(responseString);
+            }
+            catch (JsonReaderException ex)
+            {
+                Logger.Error(ex, $"SendCode 响应非 JSON body={responseString}");
+                throw new Exception($"发送验证码失败：响应异常（HTTP {(int)response.StatusCode}）", ex);
+            }
+
+            if (IsSuccessCode(responseJson["code"])) return true;
+
+            var msg = responseJson["message"]?.Value<string>() ?? responseString;
+            throw new Exception(msg);
         }
 
         /// <summary>
@@ -137,47 +186,51 @@ namespace HyggeIMaoTai
         /// <exception cref="Exception"></exception>
         public async Task<bool> Login(string phone, string code)
         {
-            var client = new HttpClient();
+            if (string.IsNullOrWhiteSpace(phone))
+                throw new Exception("手机号不能为空");
+            if (string.IsNullOrWhiteSpace(code))
+                throw new Exception("验证码不能为空");
+
+            using var handler = new HttpClientHandler
+            {
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate |
+                                        DecompressionMethods.Brotli
+            };
+            using var client = new HttpClient(handler);
             var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var phoneT = phone.Trim();
+            var codeT = code.Trim();
             var values = new Dictionary<string, string>
             {
-                { "mobile", phone },
+                { "mobile", phoneT },
                 { "ydToken", "" },
-                { "vCode", code },
+                { "vCode", codeT },
                 { "ydLogId", "" },
-                { "md5", Signature(phone + code + "" + "", timestamp) },
+                { "md5", Signature(phoneT + codeT + "" + "", timestamp) },
                 { "timestamp", timestamp + "" },
                 { "MT-APP-Version", await GetMtVersion() }
             };
-            var content = new StringContent(JsonConvert.SerializeObject(values), Encoding.UTF8, "application/json");
-            client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "*/*");
-            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "iOS;16.3;Apple;?unrecognized?");
-            client.DefaultRequestHeaders.Add("MT-Lat", "28.499562");
-            client.DefaultRequestHeaders.Add("MT-K", "1675213490331");
-            client.DefaultRequestHeaders.Add("MT-Lng", "102.182324");
-            client.DefaultRequestHeaders.Add("Host", "app.moutai519.com.cn");
-            client.DefaultRequestHeaders.Add("MT-User-Tag", "0");
-            client.DefaultRequestHeaders.Add("MT-Network-Type", "WIFI");
-            client.DefaultRequestHeaders.TryAddWithoutValidation("MT-Team-ID", "");
-            client.DefaultRequestHeaders.Add("MT-Info", "028e7f96f6369cafe1d105579c5b9377");
-            client.DefaultRequestHeaders.Add("MT-Device-ID", "2F2075D0-B66C-4287-A903-DBFF6358342A");
-            client.DefaultRequestHeaders.Add("MT-Bundle-ID", "com.moutai.mall");
-            client.DefaultRequestHeaders.Add("Accept-Language", "en-CN;q=1, zh-Hans-CN;q=0.9");
-            client.DefaultRequestHeaders.Add("MT-Request-ID", "167560018873318465");
-            client.DefaultRequestHeaders.Add("MT-APP-Version", await GetMtVersion());
-            client.DefaultRequestHeaders.Add("MT-R", "clips_OlU6TmFRag5rCXwbNAQ/Tz1SKlN8THcecBp/HGhHdw==");
-            client.DefaultRequestHeaders.TryAddWithoutValidation("Content-Length", "93");
-            client.DefaultRequestHeaders.Add("Accept-Encoding", "gzip, deflate, br");
-            client.DefaultRequestHeaders.Add("Connection", "keep-alive");
-            client.DefaultRequestHeaders.TryAddWithoutValidation("Content-Type", "application/json");
-            var response = await client
-                .PostAsync("https://app.moutai519.com.cn/xhr/front/user/register/login", content);
+            var url = "https://app.moutai519.com.cn/xhr/front/user/register/login";
+            using var request = new HttpRequestMessage(HttpMethod.Post, url);
+            await AttachMoutaiHeadersAsync(request);
+            request.Content =
+                new StringContent(JsonConvert.SerializeObject(values), Encoding.UTF8, "application/json");
+            var response = await client.SendAsync(request);
             var responseString = await response.Content.ReadAsStringAsync();
-            var responseJson = JObject.Parse(responseString);
-            var responseCode = (string)responseJson["code"];
-            if (responseCode != "2000")
+            JObject responseJson;
+            try
+            {
+                responseJson = JObject.Parse(responseString);
+            }
+            catch (JsonReaderException ex)
+            {
+                Logger.Error(ex, $"Login 响应非 JSON body={responseString}");
+                throw new Exception($"登录失败：响应异常（HTTP {(int)response.StatusCode}）", ex);
+            }
+
+            if (!IsSuccessCode(responseJson["code"]))
                 throw new Exception(responseJson.TryGetValue("message", out var value)
-                    ? value.Value<string>()
+                    ? value.Value<string>() ?? responseString
                     : responseString);
             // 存储一下数据
             var foundUserEntity = UserManageViewModel.UserList.FirstOrDefault(user => user.Mobile == phone);

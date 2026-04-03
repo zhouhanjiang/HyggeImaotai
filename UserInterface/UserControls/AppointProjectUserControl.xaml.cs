@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Windows;
-using Flurl.Http;
+using HyggeIMaoTai;
 using HyggeIMaoTai.Entity;
 using HyggeIMaoTai.Domain;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using HyggeIMaoTai.UserInterface.Component;
+using NLog;
 
 namespace HyggeIMaoTai.UserInterface.UserControls
 {
@@ -13,6 +13,8 @@ namespace HyggeIMaoTai.UserInterface.UserControls
     /// </summary>
     public partial class AppointProjectUserControl : System.Windows.Controls.UserControl
     {
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
         public AppointProjectUserControl()
         {
             InitializeComponent();
@@ -21,10 +23,24 @@ namespace HyggeIMaoTai.UserInterface.UserControls
 
         private async void RefreshProductButton_OnClick(object sender, RoutedEventArgs e)
         {
-            App.MtSessionId = string.Empty;
-            App.WriteCache("mtSessionId.txt",string.Empty);
-            AppointProjectViewModel.ProductList.Clear();
-            await IMTService.GetCurrentSessionId();
+            RefreshProductButton.IsEnabled = false;
+            try
+            {
+                App.MtSessionId = string.Empty;
+                App.WriteCache("mtSessionId.txt", string.Empty);
+                AppointProjectViewModel.ProductList.Clear();
+                await IMTService.GetCurrentSessionId();
+                new MessageBoxCustom("商品列表已刷新", MessageType.Success, MessageButtons.Ok).ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex, $"刷新商品列表失败: {ex.Message}");
+                new MessageBoxCustom($"刷新商品列表失败：{ex.Message}", MessageType.Error, MessageButtons.Ok).ShowDialog();
+            }
+            finally
+            {
+                RefreshProductButton.IsEnabled = true;
+            }
         }
     }
 }

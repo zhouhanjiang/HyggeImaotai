@@ -1,9 +1,10 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Windows;
 using HyggeIMaoTai.Domain;
 using HyggeIMaoTai.Entity;
 using HyggeIMaoTai.Repository;
+using HyggeIMaoTai.UserInterface.Component;
 using HyggeIMaoTai.Utils;
 
 namespace HyggeIMaoTai.UserInterface.UserControls
@@ -69,11 +70,11 @@ namespace HyggeIMaoTai.UserInterface.UserControls
                     await IMTService.RefreshShop();
                     RefreshData();
                 }, "正在刷新商店数据...");
+                new MessageBoxCustom("商店数据已刷新", MessageType.Success, MessageButtons.Ok).ShowDialog();
             }
-            catch (Exception ex)
+            catch
             {
-                // 错误已在 DialogHelper 中处理，这里可以添加额外的错误处理逻辑
-                // 如果需要自定义错误处理，可以使用带 onError 参数的重载方法
+                // 错误已在 DialogHelper 中提示
             }
             finally
             {

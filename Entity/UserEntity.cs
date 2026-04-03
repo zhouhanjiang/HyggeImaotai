@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows.Input;
 using FreeSql.DataAnnotations;
 using HyggeIMaoTai.Domain;
@@ -8,6 +8,7 @@ using HyggeIMaoTai.UserInterface.Dialogs.DirectAddAccountDialog;
 using MaterialDesignThemes.Wpf;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using NLog;
 
 namespace HyggeIMaoTai.Entity
 {
@@ -15,6 +16,7 @@ namespace HyggeIMaoTai.Entity
     {
         #region Field
 
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         private bool _isSelected;
 
@@ -206,7 +208,8 @@ namespace HyggeIMaoTai.Entity
                 }
                 catch (Exception e)
                 {
-                    new MessageBoxCustom("预约请求失败,响应结果详细请查看日志", MessageType.Error, MessageButtons.Ok).ShowDialog();
+                    Logger.Error(e, $"手动预约失败: {e.Message}");
+                    new MessageBoxCustom($"预约请求失败：{e.Message}", MessageType.Error, MessageButtons.Ok).ShowDialog();
                 }
             }
         }

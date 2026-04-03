@@ -1,10 +1,13 @@
-﻿using System.Text.RegularExpressions;
+using System;
+using System.Text.RegularExpressions;
 using System.Windows;
 using HyggeIMaoTai.Domain;
 using HyggeIMaoTai.Entity;
 using HyggeIMaoTai.Repository;
+using HyggeIMaoTai.UserInterface.Component;
 using HyggeIMaoTai.UserInterface.UserControls;
 using MaterialDesignThemes.Wpf;
+using NLog;
 
 namespace HyggeIMaoTai.UserInterface.Dialogs.DirectAddAccountDialog
 {
@@ -13,7 +16,8 @@ namespace HyggeIMaoTai.UserInterface.Dialogs.DirectAddAccountDialog
     /// </summary>
     public partial class DirectAddAccountDialogUserControl
     {
-        private IMTService service = new();
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
         private readonly UserEntity _dataContext;
 
  
@@ -44,7 +48,7 @@ namespace HyggeIMaoTai.UserInterface.Dialogs.DirectAddAccountDialog
             bool latIsFloat = Regex.IsMatch(_dataContext.Lat, @"^\d+(\.\d+)?$");
             if (!latIsFloat && !latIsInteger)
             {
-                MessageBox.Show("纬度不符合规范", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+                new MessageBoxCustom("纬度不符合规范", MessageType.Warning, MessageButtons.Ok).ShowDialog();
                 return; // 验证失败，不关闭对话框
             }
 
@@ -52,36 +56,34 @@ namespace HyggeIMaoTai.UserInterface.Dialogs.DirectAddAccountDialog
             bool lngIsFloat = Regex.IsMatch(_dataContext.Lng, @"^\d+(\.\d+)?$");
             if (!lngIsFloat && !lngIsInteger)
             {
-                MessageBox.Show("经度不符合规范", "错误", MessageBoxButton.OK, MessageBoxImage.Warning);
+                new MessageBoxCustom("经度不符合规范", MessageType.Warning, MessageButtons.Ok).ShowDialog();
                 return; // 验证失败，不关闭对话框
             }
 
-            // 检查用户是否已存在
-            var foundUserEntity = UserRepository.GetUserByMobile(_dataContext.Mobile);
-            
-            if (foundUserEntity != null)
+            try
             {
-                // 执行更新操作
-                UserRepository.UpdateUser(_dataContext);
+                var foundUserEntity = UserRepository.GetUserByMobile(_dataContext.Mobile);
 
-                // 刷新用户列表
-                UserManageControl.RefreshData(UserManageControl.UserListViewModel);
-                
-                MessageBox.Show("用户信息更新成功！", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                if (foundUserEntity != null)
+                {
+                    UserRepository.UpdateUser(_dataContext);
+                    UserManageControl.RefreshData(UserManageControl.UserListViewModel);
+                    new MessageBoxCustom("用户信息更新成功！", MessageType.Success, MessageButtons.Ok).ShowDialog();
+                }
+                else
+                {
+                    UserRepository.InsertUser(_dataContext);
+                    UserManageControl.RefreshData(UserManageControl.UserListViewModel);
+                    new MessageBoxCustom("用户添加成功！", MessageType.Success, MessageButtons.Ok).ShowDialog();
+                }
+
+                DialogHost.CloseDialogCommand.Execute(null, null);
             }
-            else
+            catch (Exception ex)
             {
-                // 执行插入操作
-                UserRepository.InsertUser(_dataContext);
-
-                // 刷新用户列表
-                UserManageControl.RefreshData(UserManageControl.UserListViewModel);
-                
-                MessageBox.Show("用户添加成功！", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                Logger.Error(ex, $"保存用户失败: {ex.Message}");
+                new MessageBoxCustom($"保存失败：{ex.Message}", MessageType.Error, MessageButtons.Ok).ShowDialog();
             }
-
-            // 操作成功，关闭对话框
-            DialogHost.CloseDialogCommand.Execute(null, null);
         }
     }
 }

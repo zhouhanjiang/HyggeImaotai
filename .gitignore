@@ -361,3 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+cache/imaotai.db
+cache/mtSessionId.txt
+cache/productList.json

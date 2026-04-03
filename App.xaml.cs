@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
@@ -52,7 +52,10 @@ namespace HyggeIMaoTai
             if (File.Exists(_productListFile))
             {
                 var json = File.ReadAllText(_productListFile);
-                AppointProjectViewModel.ProductList = JsonConvert.DeserializeObject<ObservableCollection<ProductEntity>>(json);
+                var list = JsonConvert.DeserializeObject<ObservableCollection<ProductEntity>>(json);
+                // 2026-04-03 缓存损坏或格式异常时 DeserializeObject 可能为 null，避免刷新商品时 NRE
+                if (list != null)
+                    AppointProjectViewModel.ProductList = list;
             }
             // 开始初始化数据库
             CommonRepository.CreateDatabase();

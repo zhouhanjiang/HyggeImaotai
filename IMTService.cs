@@ -371,6 +371,18 @@ namespace HyggeIMaoTai
             return base64String;
         }
 
+        // 2026-04-03 兼容接口字段名变更，避免缺失键时 NRE
+        private static string TryPickJsonString(JObject o, params string[] keys)
+        {
+            foreach (var k in keys)
+            {
+                var t = o[k];
+                if (t != null && t.Type != JTokenType.Null)
+                    return t.Type == JTokenType.String ? t.Value<string>() ?? "" : t.ToString();
+            }
+            return "";
+        }
+
         /// <summary>
         /// 获取当前会话的专属ID,并更新商品列表数据
         /// </summary>
@@ -389,25 +401,49 @@ namespace HyggeIMaoTai
                                      milliseconds)
                 .GetStringAsync();
             var jObject = JObject.Parse(responseStr);
-            if (jObject.GetValue("code").Value<int>() == 2000)
+            var codeToken = jObject["code"];
+            var codeOk = codeToken?.Type == JTokenType.Integer && codeToken.Value<int>() == 2000
+                         || codeToken?.Type == JTokenType.String && codeToken.Value<string>() == "2000";
+            if (!codeOk)
             {
-                var dataJObject = jObject["data"];
-                App.MtSessionId = dataJObject["sessionId"].Value<string>();
-                var itemList = (JArray)dataJObject["itemList"];
-                AppointProjectViewModel.ProductList.Clear();
-                foreach (var itemElement in itemList)
-                {
-                    AppointProjectViewModel.ProductList.Add(new ProductEntity(itemElement["itemCode"].Value<string>(),
-                        itemElement["title"].Value<string>(),
-                        itemElement["content"].Value<string>(),
-                        itemElement["picture"].Value<string>(), DateTime.Now));
-                }
-
-                App.WriteCache("productList.json", JsonConvert.SerializeObject(AppointProjectViewModel.ProductList));
-                App.WriteCache("mtSessionId.txt", App.MtSessionId);
+                var msg = jObject["message"]?.Value<string>() ?? responseStr;
+                throw new Exception($"获取场次失败：{msg}");
             }
 
-            return mtSessionId;
+            var dataJObject = jObject["data"] as JObject;
+            if (dataJObject == null)
+                throw new Exception($"获取场次失败：响应缺少 data 节点 body={responseStr}");
+
+            var sessionToken = dataJObject["sessionId"];
+            if (sessionToken == null || sessionToken.Type == JTokenType.Null)
+                throw new Exception($"获取场次失败：缺少 sessionId body={responseStr}");
+            App.MtSessionId = sessionToken.Value<string>() ?? "";
+
+            if (AppointProjectViewModel.ProductList == null)
+                AppointProjectViewModel.ProductList =
+                    new System.Collections.ObjectModel.ObservableCollection<ProductEntity>();
+
+            var itemList = dataJObject["itemList"] as JArray;
+            AppointProjectViewModel.ProductList.Clear();
+            if (itemList != null)
+            {
+                foreach (var itemElement in itemList)
+                {
+                    if (itemElement is not JObject itemObj) continue;
+                    var code = TryPickJsonString(itemObj, "itemCode", "item_code", "code");
+                    var title = TryPickJsonString(itemObj, "title", "itemName", "name");
+                    var content = TryPickJsonString(itemObj, "content", "desc", "description");
+                    var picture = TryPickJsonString(itemObj, "picture", "img", "image", "picUrl", "pictureUrl");
+                    if (string.IsNullOrEmpty(code)) continue;
+                    AppointProjectViewModel.ProductList.Add(new ProductEntity(code, title, content, picture,
+                        DateTime.Now));
+                }
+            }
+
+            App.WriteCache("productList.json", JsonConvert.SerializeObject(AppointProjectViewModel.ProductList));
+            App.WriteCache("mtSessionId.txt", App.MtSessionId);
+
+            return App.MtSessionId;
         }
 
         /// <summary>
